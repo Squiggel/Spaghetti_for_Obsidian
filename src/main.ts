@@ -155,8 +155,10 @@ class SystemFileExplorerView extends ItemView {
 	activeWatchers: Map<string, fs.FSWatcher> = new Map();
 	debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 	
-	// Track the main scroll container for the tree
+	// Track the main scroll container and scroll positions for the tree
 	treeRootEl!: HTMLElement;
+	savedScrollTop: number = 0;
+	savedScrollLeft: number = 0;
 	activeMainTab: 'explorer' | 'orphans' = 'explorer';
 
 	constructor(leaf: WorkspaceLeaf, plugin: MyPlugin) {
@@ -232,9 +234,14 @@ class SystemFileExplorerView extends ItemView {
 	 * Renders the original tree explorer interface inside its tab body
 	 */
 	renderExplorerInterface(container: HTMLElement) {
-		// 1. Capture current scroll position before clearing/rebuilding if element exists
-		const currentScrollTop = this.treeRootEl ? this.treeRootEl.scrollTop : 0;
-		const currentScrollLeft = this.treeRootEl ? this.treeRootEl.scrollLeft : 0;
+		// 1. If treeRootEl already exists, save its scroll position before clearing
+		if (this.treeRootEl) {
+			this.savedScrollTop = this.treeRootEl.scrollTop;
+			this.savedScrollLeft = this.treeRootEl.scrollLeft;
+		}
+
+		// Completely clear the container first to prevent stacking/nesting duplicates
+		container.empty();
 
 		// Sub-header with Title & Refresh Button
 		const headerContainer = container.createDiv('explorer-sticky-header');
@@ -244,10 +251,13 @@ class SystemFileExplorerView extends ItemView {
 		setIcon(refreshBtn, 'refresh-cw');
 		refreshBtn.title = "Refresh Explorer";
 		refreshBtn.onclick = () => {
+			// Reset saved scroll positions on manual refresh if desired, or keep them
+			this.savedScrollTop = 0;
+			this.savedScrollLeft = 0;
 			this.renderExplorerInterface(container);
 		};
 
-		// 2. Scrollable Tree Container
+		// 2. Freshly create the Scrollable Tree Container
 		this.treeRootEl = container.createDiv('tree-root');
 
 		const roots = this.getSystemRoots();
@@ -257,10 +267,10 @@ class SystemFileExplorerView extends ItemView {
 			this.renderFolder(this.treeRootEl, root, root, false, existingNotes);
 		}
 
-		// 3. Restore scroll position after rebuilding nodes
+		// 3. Restore the saved scroll position right after building elements
 		if (this.treeRootEl) {
-			this.treeRootEl.scrollTop = currentScrollTop;
-			this.treeRootEl.scrollLeft = currentScrollLeft;
+			this.treeRootEl.scrollTop = this.savedScrollTop;
+			this.treeRootEl.scrollLeft = this.savedScrollLeft;
 		}
 	}
 
