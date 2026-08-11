@@ -518,7 +518,7 @@ class SystemFileExplorerView extends ItemView {
 			relinkBtn.style.justifyContent = 'center';
 			
 			setIcon(relinkBtn, 'link');
-			relinkBtn.title = "Re-Link note";
+			relinkBtn.title = "Re-link note";
 			relinkBtn.onclick = async () => {
 				const success = await this.plugin.relinkOrphanNote(orphan.note, orphan.pathStr);
 				if (success) {
