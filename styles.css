@@ -162,3 +162,20 @@
 	margin-left: 10px;
 	font-style: italic;
 }
+
+
+/* Cloud-only symbol styling */
+.cloud-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	margin-right: 4px;
+	border-radius: 4px;
+	color: var(--text-accent); /* Standard Obsidian accent/blue color */
+}
+
+.cloud-btn svg {
+	width: 14px;
+	height: 14px;
+}

@@ -109,7 +109,6 @@ class SystemFileExplorerView extends ItemView {
 	 * Completely rebuilds the tree UI. Attached to the manual refresh button.
 	 */
 	refreshTree() {
-		// 1. Capture BOTH vertical and horizontal scroll positions if the element exists
 		const currentScrollTop = this.treeRootEl ? this.treeRootEl.scrollTop : 0;
 		const currentScrollLeft = this.treeRootEl ? this.treeRootEl.scrollLeft : 0;
 
@@ -117,7 +116,7 @@ class SystemFileExplorerView extends ItemView {
 		container.empty();
 		container.addClass('custom-explorer-container');
 
-		// Sticky Header with Refresh Button
+		// 1. Sticky Header with Refresh Button
 		const headerContainer = container.createDiv('explorer-sticky-header');
 		headerContainer.createEl('h4', { text: 'Spaghetti' });
 		
@@ -128,17 +127,17 @@ class SystemFileExplorerView extends ItemView {
 			this.refreshTree();
 		};
 
-		// Scrollable Tree Container
+		// 2. Scrollable Tree Container
 		this.treeRootEl = container.createDiv('tree-root');
 
 		const roots = this.getSystemRoots();
 		const existingNotes = this.getExistingNoteIdentifiers();
 
 		for (const root of roots) {
+			// We skip the stat check for system roots as they can throw errors, just assume no note
 			this.renderFolder(this.treeRootEl, root, root, false, existingNotes);
 		}
 
-		// 2. Restore BOTH scroll positions instantly after rendering
 		if (this.treeRootEl) {
 			this.treeRootEl.scrollTop = currentScrollTop;
 			this.treeRootEl.scrollLeft = currentScrollLeft;
@@ -202,6 +201,32 @@ class SystemFileExplorerView extends ItemView {
 			}
 		}
 		return identifiers;
+	}
+
+	/**
+	 * Determines if a file is online-only (cloud placeholder) based on 
+	 * platform attributes or the requested debug string.
+	 */
+	isCloudOnlyFile(filePath: string, stat: fs.Stats): boolean {
+		// Debug trigger requested by user
+		if (filePath.includes("CLOUD_CLOUD_CLOUD")) {
+			return true;
+		}
+
+		// On Windows, cloud files (OneDrive/Dropbox) often have specific file attributes 
+		// (e.g., FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS / FILE_ATTRIBUTE_OFFLINE).
+		// Stat modes / Windows dwFileAttributes can be checked if available via node bindings, 
+		// but checking common cloud placeholder indicators or virtual attributes can be hooked here.
+		if (os.platform() === 'win32') {
+			// @ts-ignore - stat.fileAttributes is sometimes available in newer Node environments or custom builds
+			const attrs = stat.fileAttributes || 0;
+			// 0x1000 is FILE_ATTRIBUTE_OFFLINE, 0x40000 is FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+			if ((attrs & 0x1000) || (attrs & 0x40000)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	async handleNodeClick(name: string, fullPath: string, stat: fs.Stats, noteBtnEl: HTMLElement) {
@@ -286,7 +311,6 @@ modified_time: "${stat.mtime.toISOString()}"
 `;
 				targetFile = await this.app.vault.create(finalNotePath, content);
 				
-				// Automatically turn the button green upon successful creation
 				noteBtnEl.removeClass('missing');
 				noteBtnEl.addClass('exists');
 			}
@@ -309,22 +333,32 @@ modified_time: "${stat.mtime.toISOString()}"
 		const collapseBtn = headerEl.createSpan({ cls: 'collapse-btn', text: '▶' });
 		const nameEl = headerEl.createSpan({ cls: 'node-name', text: name });
 
-		// Evaluate node existence
 		let hasNote = false;
 		let stat: fs.Stats | null = null;
 		try {
 			stat = fs.statSync(dirPath);
 			hasNote = existingNotes.has(`${stat.ino}_${stat.dev}`);
-		} catch (e) {
-			// Permission errors common on root/system folders
+		} catch (e) {}
+
+		// Check if it's an online-only cloud folder or matches our debug condition
+		const isCloud = stat ? this.isCloudOnlyFile(dirPath, stat) : dirPath.includes("CLOUD_CLOUD_CLOUD");
+
+		if (isCloud) {
+			// Render a blue cloud symbol, hide collapse button/behavior for cloud-only folders
+			collapseBtn.style.visibility = 'hidden';
+			const cloudBtn = headerEl.createSpan({ cls: 'cloud-btn' });
+			setIcon(cloudBtn, 'cloud');
+			cloudBtn.title = "Can't work with online-only items on cloud drives. Download it!";
+			
+			headerEl.onclick = (e) => e.stopPropagation();
+			return; // Stop here so it doesn't try to watch or expand
 		}
 
-		// New Note Button
+		// New Note Button (for normal folders)
 		const noteBtn = headerEl.createSpan({ cls: `note-btn ${hasNote ? 'exists' : 'missing'}` });
 		setIcon(noteBtn, 'pen');
-		noteBtn.title = hasNote ? "Open Note" : "Create Note";
+		noteBtn.title = hasNote ? "Open note" : "Create note";
 
-		// Click event specifically for the pen icon
 		noteBtn.onclick = (e) => {
 			e.stopPropagation();
 			if (stat) this.handleNodeClick(name, dirPath, stat, noteBtn);
@@ -360,7 +394,6 @@ modified_time: "${stat.mtime.toISOString()}"
 			}
 		};
 
-		// Clicking the main header area (name or blank space) now expands/collapses
 		headerEl.onclick = toggleExpand;
 		collapseBtn.onclick = toggleExpand;
 
@@ -377,34 +410,44 @@ modified_time: "${stat.mtime.toISOString()}"
 		headerEl.createSpan({ cls: 'collapse-spacer' });
 		const nameEl = headerEl.createSpan({ cls: 'node-name file-name', text: name });
 		
-		let hasNote = false;
 		let stat: fs.Stats | null = null;
 		try {
 			stat = fs.statSync(filePath);
-			hasNote = existingNotes.has(`${stat.ino}_${stat.dev}`);
 		} catch (e) {}
 
-		// New Note Button
-		const noteBtn = headerEl.createSpan({ cls: `note-btn ${hasNote ? 'exists' : 'missing'}` });
-		setIcon(noteBtn, 'pen');
-		noteBtn.title = hasNote ? "Open Note" : "Create Note";
+		// Check if it's an online-only cloud file or matches our debug condition
+		const isCloud = stat ? this.isCloudOnlyFile(filePath, stat) : filePath.includes("CLOUD_CLOUD_CLOUD");
 
-		noteBtn.onclick = (e) => {
-			e.stopPropagation();
-			if (stat) this.handleNodeClick(name, filePath, stat, noteBtn);
-		};
+		if (isCloud) {
+			// Render a blue cloud symbol instead of the note button, with no default system open button
+			const cloudBtn = headerEl.createSpan({ cls: 'cloud-btn' });
+			setIcon(cloudBtn, 'cloud');
+			cloudBtn.title = "Can't work with online-only items on cloud drives. Download it!";
+		} else {
+			let hasNote = false;
+			if (stat) {
+				hasNote = existingNotes.has(`${stat.ino}_${stat.dev}`);
+			}
 
-		const openBtn = headerEl.createSpan({ cls: 'open-system-btn' });
-		setIcon(openBtn, 'external-link'); // Look cleaner with standard icon
-		openBtn.title = "Open with system default";
+			const noteBtn = headerEl.createSpan({ cls: `note-btn ${hasNote ? 'exists' : 'missing'}` });
+			setIcon(noteBtn, 'pen');
+			noteBtn.title = hasNote ? "Open note" : "Create note";
 
-		openBtn.onclick = (e) => {
-			e.stopPropagation();
-			shell.openPath(filePath);
-		};
+			noteBtn.onclick = (e) => {
+				e.stopPropagation();
+				if (stat) this.handleNodeClick(name, filePath, stat, noteBtn);
+			};
 
-		// Clicking the main file area now does nothing specific, or you can bind it to shell open
-		// but typically files don't expand. We'll prevent it from bubbling.
+			const openBtn = headerEl.createSpan({ cls: 'open-system-btn' });
+			setIcon(openBtn, 'external-link');
+			openBtn.title = "Open with system default";
+
+			openBtn.onclick = (e) => {
+				e.stopPropagation();
+				shell.openPath(filePath);
+			};
+		}
+
 		headerEl.onclick = (e) => {
 			e.stopPropagation();
 		};
@@ -415,7 +458,7 @@ modified_time: "${stat.mtime.toISOString()}"
 		
 		try {
 			const items = fs.readdirSync(dirPath, { withFileTypes: true });
-			const existingNotes = this.getExistingNoteIdentifiers(); // Fetch once per folder load
+			const existingNotes = this.getExistingNoteIdentifiers();
 			
 			items.sort((a, b) => {
 				if (a.isDirectory() && !b.isDirectory()) return -1;
