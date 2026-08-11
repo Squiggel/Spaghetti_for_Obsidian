@@ -1,8 +1,89 @@
-/*
+/* Custom System Explorer Styles */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.custom-explorer-container {
+	padding: 10px;
+	overflow-y: auto;
+}
 
-If your plugin does not need CSS, delete this file.
+.tree-root {
+	margin-top: 10px;
+}
 
-*/
+.tree-node {
+	margin: 2px 0;
+	user-select: none; /* Prevent accidental text selection while clicking */
+}
+
+.tree-node-header {
+	display: flex;
+	align-items: center;
+	padding: 4px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.tree-node-header:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.tree-node-children {
+	margin-left: 18px; /* Indentation for child elements */
+	border-left: 1px solid var(--background-modifier-border);
+	padding-left: 5px;
+}
+
+/* Icons and Text formatting */
+.collapse-btn {
+	width: 16px;
+	font-size: 10px;
+	color: var(--text-muted);
+	text-align: center;
+	margin-right: 6px;
+	display: inline-block;
+}
+
+.collapse-spacer {
+	width: 16px;
+	margin-right: 6px;
+	display: inline-block;
+}
+
+.node-name {
+	flex-grow: 1;
+	font-size: 14px;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.file-name {
+	color: var(--text-muted);
+}
+
+/* System Default Button */
+.open-system-btn {
+	opacity: 0; /* Hidden until hovered */
+	font-size: 12px;
+	margin-left: 8px;
+	padding: 2px 6px;
+	background-color: var(--interactive-normal);
+	border-radius: 4px;
+	color: var(--text-normal);
+	transition: opacity 0.2s ease;
+}
+
+.tree-node-header:hover .open-system-btn {
+	opacity: 1;
+}
+
+.open-system-btn:hover {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.error-text {
+	color: var(--text-error);
+	font-size: 12px;
+	margin-left: 10px;
+}
