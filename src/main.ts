@@ -48,26 +48,25 @@ export default class MyPlugin extends Plugin {
 	onunload() {}
 
 		/**
+	/**
 	 * Opens a native system file/folder dialog to let the user re-link an orphaned note.
 	 */
-	async relinkOrphanNote(note: TFile, oldPath?: string) {
+	async relinkOrphanNote(note: TFile, oldPath?: string): Promise<boolean> {
 		try {
-			// Determine if the original target was a directory/folder or a file.
-			// Fallback: check if the path doesn't have a standard file extension or test fs stats.
 			let isDirectoryTarget = false;
+			let defaultPathDir = undefined;
 			
 			if (oldPath && oldPath !== 'Unknown path') {
 				try {
 					const stat = fs.statSync(oldPath);
 					isDirectoryTarget = stat.isDirectory();
+					defaultPathDir = path.dirname(oldPath);
 				} catch (e) {
-					// If it doesn't exist on disk anymore, infer from path characteristics 
-					// (e.g., lacks an extension, or matches how you structured folder notes).
 					isDirectoryTarget = !path.extname(oldPath);
+					defaultPathDir = path.dirname(oldPath);
 				}
 			}
 
-			// Set properties dynamically: 'openDirectory' if it was a folder, 'openFile' if it was a file
 			const dialogProperties: ('openFile' | 'openDirectory' | 'showHiddenFiles')[] = isDirectoryTarget 
 				? ['openDirectory'] 
 				: ['openFile'];
@@ -78,7 +77,8 @@ export default class MyPlugin extends Plugin {
 
 			const result = await dialog.showOpenDialog({
 				title: isDirectoryTarget ? 'Select replacement folder for this note' : 'Select replacement file for this note',
-				properties: dialogProperties
+				properties: dialogProperties,
+				defaultPath: defaultPathDir
 			});
 
 			if (!result.canceled && result.filePaths.length > 0) {
@@ -343,12 +343,34 @@ class SystemFileExplorerView extends ItemView {
 			const itemEl = listContainer.createDiv({ cls: 'orphan-item' });
 			itemEl.style.display = 'flex';
 			itemEl.style.alignItems = 'center';
-			itemEl.style.gap = '10px'; // Spacing between the icon and text
+			itemEl.style.gap = '10px';
 			itemEl.style.padding = '8px 0';
 			itemEl.style.borderBottom = '1px solid var(--background-modifier-border)';
 
-			// 1. Create the button on the left with a link icon
-			const relinkBtn = itemEl.createEl('button', { cls: 'relink-icon-btn' });
+			// Container on the left for actions (Open Note + Re-Link)
+			const actionsContainer = itemEl.createDiv();
+			actionsContainer.style.display = 'flex';
+			actionsContainer.style.gap = '4px';
+
+			// 1. Open Note Button (New)
+			const openNoteBtn = actionsContainer.createEl('button', { cls: 'open-note-icon-btn' });
+			openNoteBtn.style.background = 'none';
+			openNoteBtn.style.border = 'none';
+			openNoteBtn.style.cursor = 'pointer';
+			openNoteBtn.style.padding = '4px';
+			openNoteBtn.style.display = 'flex';
+			openNoteBtn.style.alignItems = 'center';
+			openNoteBtn.style.justifyContent = 'center';
+			
+			setIcon(openNoteBtn, 'pen'); // Uses the same pen icon style as the tree explorer
+			openNoteBtn.title = "Open orphan note";
+			openNoteBtn.onclick = async () => {
+				const leaf = this.app.workspace.getLeaf(false);
+				await leaf.openFile(orphan.note);
+			};
+
+			// 2. Re-Link Button
+			const relinkBtn = actionsContainer.createEl('button', { cls: 'relink-icon-btn' });
 			relinkBtn.style.background = 'none';
 			relinkBtn.style.border = 'none';
 			relinkBtn.style.cursor = 'pointer';
@@ -357,18 +379,16 @@ class SystemFileExplorerView extends ItemView {
 			relinkBtn.style.alignItems = 'center';
 			relinkBtn.style.justifyContent = 'center';
 			
-			setIcon(relinkBtn, 'link'); // Sets Obsidian's link icon
+			setIcon(relinkBtn, 'link');
 			relinkBtn.title = "Re-Link note";
-
 			relinkBtn.onclick = async () => {
-				// Pass the orphan path so we can check if it was a file or folder
 				const success = await this.plugin.relinkOrphanNote(orphan.note, orphan.pathStr);
 				if (success) {
-					this.renderMainView(); // Refresh view panel contents
+					this.renderMainView(); 
 				}
 			};
 
-			// 2. Text info block on the right
+			// 3. Text info block on the right
 			const infoEl = itemEl.createDiv();
 			infoEl.createEl('strong', { text: orphan.note.basename });
 			infoEl.createEl('br');
