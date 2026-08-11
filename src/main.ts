@@ -245,6 +245,11 @@ class SystemFileExplorerView extends ItemView {
 		return 'System Explorer';
 	}
 
+	// Add this new method right here!
+	getIcon() {
+		return 'noodle-box';
+	}
+
 	async onOpen() {
 		this.renderMainView();
 	}
