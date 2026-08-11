@@ -179,3 +179,22 @@
 	width: 14px;
 	height: 14px;
 }
+
+/* =========================================================================
+   CUSTOM RIBBON ICON ANIMATIONS
+   ========================================================================= */
+
+/* Target the specific ribbon icon by its aria-label */
+.workspace-ribbon-tab[aria-label="Open System Explorer"] svg {
+	overflow: visible;
+	transition: transform .18s ease, filter .18s ease;
+}
+
+.workspace-ribbon-tab[aria-label="Open System Explorer"]:hover svg {
+	transform: translateY(-3px) rotate(-1deg) scale(1.025);
+	filter: drop-shadow(0 10px 8px rgba(65, 25, 5, .25));
+}
+
+.workspace-ribbon-tab[aria-label="Open System Explorer"]:active svg {
+	transform: translateY(1px) scale(.97);
+}
