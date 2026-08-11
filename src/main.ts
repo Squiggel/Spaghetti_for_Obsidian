@@ -47,6 +47,76 @@ export default class MyPlugin extends Plugin {
 
 	onunload() {}
 
+		/**
+	 * Opens a native system file/folder dialog to let the user re-link an orphaned note.
+	 */
+	async relinkOrphanNote(note: TFile, oldPath?: string) {
+		try {
+			// Determine if the original target was a directory/folder or a file.
+			// Fallback: check if the path doesn't have a standard file extension or test fs stats.
+			let isDirectoryTarget = false;
+			
+			if (oldPath && oldPath !== 'Unknown path') {
+				try {
+					const stat = fs.statSync(oldPath);
+					isDirectoryTarget = stat.isDirectory();
+				} catch (e) {
+					// If it doesn't exist on disk anymore, infer from path characteristics 
+					// (e.g., lacks an extension, or matches how you structured folder notes).
+					isDirectoryTarget = !path.extname(oldPath);
+				}
+			}
+
+			// Set properties dynamically: 'openDirectory' if it was a folder, 'openFile' if it was a file
+			const dialogProperties: ('openFile' | 'openDirectory' | 'showHiddenFiles')[] = isDirectoryTarget 
+				? ['openDirectory'] 
+				: ['openFile'];
+
+			// @ts-ignore
+			const { remote } = window.require('electron');
+			const dialog = remote ? remote.dialog : window.require('@electron/remote').dialog;
+
+			const result = await dialog.showOpenDialog({
+				title: isDirectoryTarget ? 'Select replacement folder for this note' : 'Select replacement file for this note',
+				properties: dialogProperties
+			});
+
+			if (!result.canceled && result.filePaths.length > 0) {
+				const newPath = result.filePaths[0];
+				const stat = fs.statSync(newPath);
+				const name = path.basename(newPath);
+				const currentSafeName = name.replace(/[\\/:]/g, '_');
+				const folderPath = this.settings.notesFolder;
+
+				// Update frontmatter with new file stats (without modified_time)
+				await this.app.fileManager.processFrontMatter(note, (frontmatter) => {
+					frontmatter.full_path = newPath;
+					frontmatter.inode = stat.ino;
+					frontmatter.device_id = stat.dev;
+				});
+
+				const expectedNotePath = normalizePath(`${folderPath}/${currentSafeName}.md`);
+				if (note.path !== expectedNotePath) {
+					let finalNotePath = expectedNotePath;
+					let counter = 1;
+					while (this.app.vault.getAbstractFileByPath(finalNotePath) && this.app.vault.getAbstractFileByPath(finalNotePath) !== note) {
+						finalNotePath = normalizePath(`${folderPath}/${currentSafeName}_${counter}.md`);
+						counter++;
+					}
+					await this.app.fileManager.renameFile(note, finalNotePath);
+				}
+
+				new Notice(`Successfully re-linked note to: ${name}`);
+				return true;
+			}
+			return false;
+		} catch (err) {
+			console.error('Failed to open system dialog for re-linking', err);
+			new Notice('Error opening system selection dialog.');
+			return false;
+		}
+	}
+
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
@@ -77,7 +147,7 @@ export default class MyPlugin extends Plugin {
 }
 
 // =========================================================================
-// CUSTOM FILE EXPLORER VIEW LOGIC
+// CUSTOM FILE EXPLORER VIEW LOGIC (WITH MAIN PANEL TABS)
 // =========================================================================
 
 class SystemFileExplorerView extends ItemView {
@@ -85,8 +155,9 @@ class SystemFileExplorerView extends ItemView {
 	activeWatchers: Map<string, fs.FSWatcher> = new Map();
 	debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 	
-	// Track the main scroll container
+	// Track the main scroll container for the tree
 	treeRootEl!: HTMLElement;
+	activeMainTab: 'explorer' | 'orphans' = 'explorer';
 
 	constructor(leaf: WorkspaceLeaf, plugin: MyPlugin) {
 		super(leaf);
@@ -102,21 +173,70 @@ class SystemFileExplorerView extends ItemView {
 	}
 
 	async onOpen() {
-		this.refreshTree();
+		this.renderMainView();
+	}
+
+	async onClose() {
+		this.clearWatchers();
 	}
 
 	/**
-	 * Completely rebuilds the tree UI. Attached to the manual refresh button.
+	 * Renders the top-level panel layout with view selection tabs (Explorer vs Orphans)
 	 */
-	refreshTree() {
-		const currentScrollTop = this.treeRootEl ? this.treeRootEl.scrollTop : 0;
-		const currentScrollLeft = this.treeRootEl ? this.treeRootEl.scrollLeft : 0;
-
+	renderMainView() {
 		const container = this.containerEl.children[1];
 		container.empty();
 		container.addClass('custom-explorer-container');
 
-		// 1. Sticky Header with Refresh Button
+		// View Navigation Tabs Header
+		const navHeader = container.createDiv('explorer-view-nav');
+		navHeader.style.display = 'flex';
+		navHeader.style.gap = '5px';
+		navHeader.style.padding = '8px 10px';
+		navHeader.style.borderBottom = '1px solid var(--background-modifier-border)';
+		navHeader.style.backgroundColor = 'var(--background-secondary)';
+
+		const explorerTabBtn = navHeader.createEl('button', { 
+			text: 'Explorer', 
+			cls: this.activeMainTab === 'explorer' ? 'mod-cta' : '' 
+		});
+		explorerTabBtn.onclick = () => {
+			this.activeMainTab = 'explorer';
+			this.renderMainView();
+		};
+
+		const orphansTabBtn = navHeader.createEl('button', { 
+			text: 'Orphans', 
+			cls: this.activeMainTab === 'orphans' ? 'mod-cta' : '' 
+		});
+		orphansTabBtn.onclick = () => {
+			this.activeMainTab = 'orphans';
+			this.renderMainView();
+		};
+
+		// Content Panel Container
+		const contentContainer = container.createDiv('explorer-tab-content');
+		contentContainer.style.display = 'flex';
+		contentContainer.style.flexDirection = 'column';
+		contentContainer.style.flexGrow = '1';
+		contentContainer.style.overflow = 'hidden';
+
+		if (this.activeMainTab === 'explorer') {
+			this.renderExplorerInterface(contentContainer);
+		} else {
+			this.renderOrphansInterface(contentContainer);
+		}
+	}
+
+	/**
+	 * Renders the original tree explorer interface inside its tab body
+	 */
+	renderExplorerInterface(container: HTMLElement) {
+		// 1. Capture current scroll position before clearing/rebuilding if element exists
+		const currentScrollTop = this.treeRootEl ? this.treeRootEl.scrollTop : 0;
+		const currentScrollLeft = this.treeRootEl ? this.treeRootEl.scrollLeft : 0;
+
+		// Sub-header with Title & Refresh Button
 		const headerContainer = container.createDiv('explorer-sticky-header');
 		headerContainer.createEl('h4', { text: 'Spaghetti' });
 		
@@ -124,7 +244,7 @@ class SystemFileExplorerView extends ItemView {
 		setIcon(refreshBtn, 'refresh-cw');
 		refreshBtn.title = "Refresh Explorer";
 		refreshBtn.onclick = () => {
-			this.refreshTree();
+			this.renderExplorerInterface(container);
 		};
 
 		// 2. Scrollable Tree Container
@@ -134,18 +254,116 @@ class SystemFileExplorerView extends ItemView {
 		const existingNotes = this.getExistingNoteIdentifiers();
 
 		for (const root of roots) {
-			// We skip the stat check for system roots as they can throw errors, just assume no note
 			this.renderFolder(this.treeRootEl, root, root, false, existingNotes);
 		}
 
+		// 3. Restore scroll position after rebuilding nodes
 		if (this.treeRootEl) {
 			this.treeRootEl.scrollTop = currentScrollTop;
 			this.treeRootEl.scrollLeft = currentScrollLeft;
 		}
 	}
 
-	async onClose() {
-		this.clearWatchers();
+	/**
+	 * Renders the Orphans management panel inside its tab body
+	 */
+	renderOrphansInterface(container: HTMLElement) {
+		const wrapper = container.createDiv('orphans-view-wrapper');
+		wrapper.style.padding = '15px';
+		wrapper.style.overflowY = 'auto';
+		wrapper.style.flexGrow = '1';
+
+		wrapper.createEl('h3', { text: 'Orphaned System Notes' });
+		wrapper.createEl('p', { 
+			text: 'These notes point to system files that have been deleted or moved beyond automatic detection.',
+			cls: 'setting-item-description'
+		});
+
+		const listContainer = wrapper.createDiv({ cls: 'orphans-list-container' });
+		listContainer.style.marginTop = '15px';
+
+		const folderPath = this.plugin.settings.notesFolder;
+		if (!folderPath || folderPath.trim() === '') {
+			listContainer.createEl('p', { text: 'Please configure your Notes Folder in General Settings first.', cls: 'error-text' });
+			return;
+		}
+
+		const allNotes = this.app.vault.getFiles().filter(
+			(file) => file.path.startsWith(normalizePath(folderPath)) && file.extension === 'md'
+		);
+
+		const orphans: { note: TFile; pathStr: string }[] = [];
+
+		for (const note of allNotes) {
+			const cache = this.app.metadataCache.getFileCache(note);
+			if (cache && cache.frontmatter) {
+				const fm = cache.frontmatter;
+				const fullPath = fm.full_path;
+				
+				let isOrphan = false;
+				if (!fullPath) {
+					isOrphan = true;
+				} else {
+					try {
+						if (!fs.existsSync(fullPath)) {
+							isOrphan = true;
+						} else {
+							const stat = fs.statSync(fullPath);
+							if (fm.inode !== stat.ino || fm.device_id !== stat.dev) {
+								isOrphan = true;
+							}
+						}
+					} catch (e) {
+						isOrphan = true;
+					}
+				}
+
+				if (isOrphan) {
+					orphans.push({ note, pathStr: fullPath || 'Unknown path' });
+				}
+			}
+		}
+
+		if (orphans.length === 0) {
+			listContainer.createEl('p', { text: 'No orphaned notes found! Everything is up to date.' });
+			return;
+		}
+
+		for (const orphan of orphans) {
+			const itemEl = listContainer.createDiv({ cls: 'orphan-item' });
+			itemEl.style.display = 'flex';
+			itemEl.style.alignItems = 'center';
+			itemEl.style.gap = '10px'; // Spacing between the icon and text
+			itemEl.style.padding = '8px 0';
+			itemEl.style.borderBottom = '1px solid var(--background-modifier-border)';
+
+			// 1. Create the button on the left with a link icon
+			const relinkBtn = itemEl.createEl('button', { cls: 'relink-icon-btn' });
+			relinkBtn.style.background = 'none';
+			relinkBtn.style.border = 'none';
+			relinkBtn.style.cursor = 'pointer';
+			relinkBtn.style.padding = '4px';
+			relinkBtn.style.display = 'flex';
+			relinkBtn.style.alignItems = 'center';
+			relinkBtn.style.justifyContent = 'center';
+			
+			setIcon(relinkBtn, 'link'); // Sets Obsidian's link icon
+			relinkBtn.title = "Re-Link note";
+
+			relinkBtn.onclick = async () => {
+				// Pass the orphan path so we can check if it was a file or folder
+				const success = await this.plugin.relinkOrphanNote(orphan.note, orphan.pathStr);
+				if (success) {
+					this.renderMainView(); // Refresh view panel contents
+				}
+			};
+
+			// 2. Text info block on the right
+			const infoEl = itemEl.createDiv();
+			infoEl.createEl('strong', { text: orphan.note.basename });
+			infoEl.createEl('br');
+			infoEl.createEl('small', { text: `Old Target: ${orphan.pathStr}`, cls: 'text-muted' });
+		}
 	}
 
 	clearWatchers() {
@@ -177,10 +395,6 @@ class SystemFileExplorerView extends ItemView {
 		}
 	}
 
-	/**
-	 * Scans the vault once to find all existing attached system notes.
-	 * Returns a Set of formatted strings: "inode_deviceId"
-	 */
 	getExistingNoteIdentifiers(): Set<string> {
 		const folderPath = this.plugin.settings.notesFolder;
 		const identifiers = new Set<string>();
@@ -203,24 +417,14 @@ class SystemFileExplorerView extends ItemView {
 		return identifiers;
 	}
 
-	/**
-	 * Determines if a file is online-only (cloud placeholder) based on 
-	 * platform attributes or the requested debug string.
-	 */
 	isCloudOnlyFile(filePath: string, stat: fs.Stats): boolean {
-		// Debug trigger requested by user
 		if (filePath.includes("CLOUD_CLOUD_CLOUD")) {
 			return true;
 		}
 
-		// On Windows, cloud files (OneDrive/Dropbox) often have specific file attributes 
-		// (e.g., FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS / FILE_ATTRIBUTE_OFFLINE).
-		// Stat modes / Windows dwFileAttributes can be checked if available via node bindings, 
-		// but checking common cloud placeholder indicators or virtual attributes can be hooked here.
 		if (os.platform() === 'win32') {
-			// @ts-ignore - stat.fileAttributes is sometimes available in newer Node environments or custom builds
+			// @ts-ignore
 			const attrs = stat.fileAttributes || 0;
-			// 0x1000 is FILE_ATTRIBUTE_OFFLINE, 0x40000 is FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
 			if ((attrs & 0x1000) || (attrs & 0x40000)) {
 				return true;
 			}
@@ -267,7 +471,6 @@ class SystemFileExplorerView extends ItemView {
 				if (cache?.frontmatter?.full_path !== fullPath) {
 					await this.app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
 						frontmatter.full_path = fullPath; 
-						frontmatter.modified_time = stat.mtime.toISOString(); 
 					});
 					updated = true;
 				}
@@ -306,7 +509,6 @@ class SystemFileExplorerView extends ItemView {
 full_path: "${yamlSafePath}"
 inode: ${currentInode}
 device_id: ${currentDevice}
-modified_time: "${stat.mtime.toISOString()}"
 ---
 `;
 				targetFile = await this.app.vault.create(finalNotePath, content);
@@ -340,21 +542,18 @@ modified_time: "${stat.mtime.toISOString()}"
 			hasNote = existingNotes.has(`${stat.ino}_${stat.dev}`);
 		} catch (e) {}
 
-		// Check if it's an online-only cloud folder or matches our debug condition
 		const isCloud = stat ? this.isCloudOnlyFile(dirPath, stat) : dirPath.includes("CLOUD_CLOUD_CLOUD");
 
 		if (isCloud) {
-			// Render a blue cloud symbol, hide collapse button/behavior for cloud-only folders
 			collapseBtn.style.visibility = 'hidden';
 			const cloudBtn = headerEl.createSpan({ cls: 'cloud-btn' });
 			setIcon(cloudBtn, 'cloud');
 			cloudBtn.title = "Can't work with online-only items on cloud drives. Download it!";
 			
 			headerEl.onclick = (e) => e.stopPropagation();
-			return; // Stop here so it doesn't try to watch or expand
+			return; 
 		}
 
-		// New Note Button (for normal folders)
 		const noteBtn = headerEl.createSpan({ cls: `note-btn ${hasNote ? 'exists' : 'missing'}` });
 		setIcon(noteBtn, 'pen');
 		noteBtn.title = hasNote ? "Open note" : "Create note";
@@ -415,11 +614,9 @@ modified_time: "${stat.mtime.toISOString()}"
 			stat = fs.statSync(filePath);
 		} catch (e) {}
 
-		// Check if it's an online-only cloud file or matches our debug condition
 		const isCloud = stat ? this.isCloudOnlyFile(filePath, stat) : filePath.includes("CLOUD_CLOUD_CLOUD");
 
 		if (isCloud) {
-			// Render a blue cloud symbol instead of the note button, with no default system open button
 			const cloudBtn = headerEl.createSpan({ cls: 'cloud-btn' });
 			setIcon(cloudBtn, 'cloud');
 			cloudBtn.title = "Can't work with online-only items on cloud drives. Download it!";

@@ -4,12 +4,12 @@ import MyPlugin from './main';
 
 export interface MyPluginSettings {
 	expandedPaths: string[];
-	notesFolder: string; // The nominated folder for our generated notes
+	notesFolder: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	expandedPaths: [],
-	notesFolder: '', // No default, as requested
+	notesFolder: '',
 };
 
 export class SystemExplorerSettingTab extends PluginSettingTab {
@@ -22,7 +22,6 @@ export class SystemExplorerSettingTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
-
 		containerEl.empty();
 
 		new Setting(containerEl)
