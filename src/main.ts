@@ -1,23 +1,17 @@
+// main.ts
 import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
 	Plugin,
 	ItemView,
 	WorkspaceLeaf,
+	Notice,
 } from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+import { DEFAULT_SETTINGS, MyPluginSettings } from './settings';
 
-// Node and Electron modules for file system operations and opening files
+// Node and Electron modules
 import * as fs from 'fs';
 import * as path from 'path';
-// @ts-ignore - Electron is available in Obsidian Desktop environments
+import * as os from 'os';
+// @ts-ignore
 import { shell } from 'electron'; 
 
 const EXPLORER_VIEW_TYPE = 'custom-system-explorer-view';
@@ -28,79 +22,29 @@ export default class MyPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// REGISTER THE CUSTOM VIEW
+		// Register the custom view
 		this.registerView(
 			EXPLORER_VIEW_TYPE,
 			(leaf) => new SystemFileExplorerView(leaf, this)
 		);
 
-		// Add a ribbon icon to toggle our custom explorer in the right sidebar
-		this.addRibbonIcon('folder-tree', 'Open Custom Explorer', () => {
+		// Add a ribbon icon to toggle our custom explorer
+		this.addRibbonIcon('folder-tree', 'Open System Explorer', () => {
 			this.activateExplorerView();
 		});
 
 		// Command to open the explorer via command palette
 		this.addCommand({
-			id: 'open-custom-explorer',
-			name: 'Open Custom File Explorer',
+			id: 'open-system-explorer',
+			name: 'Open System File Explorer',
 			callback: () => {
 				this.activateExplorerView();
 			}
 		});
-
-		// --- ORIGINAL BOILERPLATE BELOW ---
-
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			new Notice('This is a notice!');
-		});
-
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, _ctx: MarkdownView | MarkdownFileInfo) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-					return true;
-				}
-				return false;
-			},
-		});
-
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			// new Notice('Click'); // Commented out to prevent annoying clicks during testing
-		});
-
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
 	}
 
 	onunload() {
-		// No manual view cleanup needed; Obsidian handles detaching registered views
+		// Clean up is handled by Obsidian
 	}
 
 	async loadSettings() {
@@ -111,7 +55,6 @@ export default class MyPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	// Helper function to open/reveal our view in the right sidebar
 	async activateExplorerView() {
 		const { workspace } = this.app;
 
@@ -119,32 +62,17 @@ export default class MyPlugin extends Plugin {
 		const leaves = workspace.getLeavesOfType(EXPLORER_VIEW_TYPE);
 
 		if (leaves.length > 0) {
-			// A leaf with our view already exists, use it
 			leaf = leaves[0];
 		} else {
-			// Our view could not be found, create a new leaf in the right sidebar
 			leaf = workspace.getRightLeaf(false);
 			if (leaf) {
 				await leaf.setViewState({ type: EXPLORER_VIEW_TYPE, active: true });
 			}
 		}
 
-		// "Reveal" the leaf in case it is in a collapsed sidebar
 		if (leaf) {
 			workspace.revealLeaf(leaf);
 		}
-	}
-}
-
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
 	}
 }
 
@@ -154,7 +82,6 @@ class SampleModal extends Modal {
 
 class SystemFileExplorerView extends ItemView {
 	plugin: MyPlugin;
-	// Store active watchers so we can close them when directories collapse or view closes
 	activeWatchers: Map<string, fs.FSWatcher> = new Map();
 
 	constructor(leaf: WorkspaceLeaf, plugin: MyPlugin) {
@@ -170,27 +97,23 @@ class SystemFileExplorerView extends ItemView {
 		return 'System Explorer';
 	}
 
-	// Called when the view is opened
 	async onOpen() {
 		const container = this.containerEl.children[1];
 		container.empty();
 		container.addClass('custom-explorer-container');
 
-		// Determine the root path. Default to the vault's base path if setting is empty.
-		let rootPath = this.plugin.settings.explorerRootPath;
-		if (!rootPath || rootPath.trim() === '') {
-			// @ts-ignore - Accessing internal adapter to get the absolute OS path of the vault
-			rootPath = this.app.vault.adapter.getBasePath();
-		}
-
-		const header = container.createEl('h4', { text: 'System Explorer' });
+		const header = container.createEl('h4', { text: 'My Computer' });
 		const rootNode = container.createDiv('tree-root');
 
-		// Start rendering the tree from the root path
-		this.renderFolder(rootNode, rootPath, path.basename(rootPath), true);
+		// Fetch root drives depending on the OS
+		const roots = this.getSystemRoots();
+
+		for (const root of roots) {
+			// We treat the system roots as top-level folders
+			this.renderFolder(rootNode, root, root, false);
+		}
 	}
 
-	// Called when the view is closed. Important to clean up file watchers!
 	async onClose() {
 		for (const [dirPath, watcher] of this.activeWatchers.entries()) {
 			watcher.close();
@@ -199,8 +122,29 @@ class SystemFileExplorerView extends ItemView {
 	}
 
 	/**
-	 * Renders a directory and sets up lazy loading for its children.
+	 * Determines the root drives of the computer.
 	 */
+	getSystemRoots(): string[] {
+		if (os.platform() === 'win32') {
+			const drives: string[] = [];
+			// Quick and dirty check for common Windows drive letters
+			for (let i = 65; i <= 90; i++) {
+				const drive = String.fromCharCode(i) + ':\\';
+				try {
+					if (fs.existsSync(drive)) {
+						drives.push(drive);
+					}
+				} catch (e) {
+					// Ignore drives that throw errors (e.g., restricted or empty optical drives)
+				}
+			}
+			return drives.length > 0 ? drives : ['C:\\'];
+		} else {
+			// macOS and Linux
+			return ['/'];
+		}
+	}
+
 	renderFolder(containerEl: HTMLElement, dirPath: string, name: string, isRoot: boolean = false) {
 		const nodeEl = containerEl.createDiv('tree-node');
 		
@@ -209,17 +153,17 @@ class SystemFileExplorerView extends ItemView {
 		const nameEl = headerEl.createSpan({ cls: 'node-name', text: name });
 
 		const childrenContainer = nodeEl.createDiv('tree-node-children');
-		childrenContainer.style.display = 'none'; // Hidden by default (lazy loaded)
+		childrenContainer.style.display = 'none';
 
-		let isExpanded = false;
+		// Check if this path was saved in data.json as expanded
+		let isExpanded = this.plugin.settings.expandedPaths.includes(dirPath);
 
-		// Select action (clicking the name)
 		nameEl.onclick = () => {
 			new Notice(`Selected! ${name}`);
 		};
 
-		// Expand/Collapse action (clicking the arrow)
-		collapseBtn.onclick = () => {
+		// The logic for expanding/collapsing
+		const toggleExpand = async () => {
 			isExpanded = !isExpanded;
 			
 			if (isExpanded) {
@@ -227,56 +171,60 @@ class SystemFileExplorerView extends ItemView {
 				childrenContainer.style.display = 'block';
 				this.loadAndRenderChildren(childrenContainer, dirPath);
 				this.startWatching(dirPath, childrenContainer);
+				
+				// Save state
+				if (!this.plugin.settings.expandedPaths.includes(dirPath)) {
+					this.plugin.settings.expandedPaths.push(dirPath);
+					await this.plugin.saveSettings();
+				}
 			} else {
 				collapseBtn.innerText = '▶';
 				childrenContainer.style.display = 'none';
-				childrenContainer.empty(); // Unload children
+				childrenContainer.empty();
 				this.stopWatching(dirPath);
+
+				// Remove from state
+				this.plugin.settings.expandedPaths = this.plugin.settings.expandedPaths.filter(p => p !== dirPath);
+				await this.plugin.saveSettings();
 			}
 		};
 
-		// If it's the root node, auto-expand it
-		if (isRoot) {
-			collapseBtn.click();
+		collapseBtn.onclick = toggleExpand;
+
+		// If it's a saved expanded path (or forced root), trigger it open immediately
+		if (isExpanded || isRoot) {
+			// Temporarily set to false so the toggle function does its job correctly
+			isExpanded = false; 
+			toggleExpand();
 		}
 	}
 
-	/**
-	 * Renders a file node.
-	 */
 	renderFile(containerEl: HTMLElement, filePath: string, name: string) {
 		const nodeEl = containerEl.createDiv('tree-node');
 		
 		const headerEl = nodeEl.createDiv('tree-node-header');
-		const spacer = headerEl.createSpan({ cls: 'collapse-spacer' }); // Empty space to align with folders
+		const spacer = headerEl.createSpan({ cls: 'collapse-spacer' });
 		const nameEl = headerEl.createSpan({ cls: 'node-name file-name', text: name });
 		
-		// System default program button
 		const openBtn = headerEl.createSpan({ cls: 'open-system-btn', text: '↗' });
 		openBtn.title = "Open with system default";
 
-		// Select action
 		nameEl.onclick = () => {
 			new Notice(`Selected! ${name}`);
 		};
 
-		// Open external action
 		openBtn.onclick = (e) => {
 			e.stopPropagation();
-			shell.openPath(filePath); // Uses electron to open in OS
+			shell.openPath(filePath);
 		};
 	}
 
-	/**
-	 * Reads directory contents and renders them inside the provided container.
-	 */
 	loadAndRenderChildren(containerEl: HTMLElement, dirPath: string) {
 		containerEl.empty();
 		
 		try {
 			const items = fs.readdirSync(dirPath, { withFileTypes: true });
 			
-			// Sort items: folders first, then files, alphabetically
 			items.sort((a, b) => {
 				if (a.isDirectory() && !b.isDirectory()) return -1;
 				if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -284,7 +232,7 @@ class SystemFileExplorerView extends ItemView {
 			});
 
 			for (const item of items) {
-				// Skip hidden files (like .git, .obsidian) to keep it clean
+				// Skip hidden/system files to avoid permission crashes
 				if (item.name.startsWith('.')) continue;
 
 				const fullPath = path.join(dirPath, item.name);
@@ -296,23 +244,17 @@ class SystemFileExplorerView extends ItemView {
 				}
 			}
 		} catch (error) {
-			containerEl.createDiv({ text: 'Error loading directory', cls: 'error-text' });
-			console.error(`Error reading directory ${dirPath}:`, error);
+			// Extremely common when hitting protected OS folders (like "System Volume Information")
+			containerEl.createDiv({ text: 'Access denied or error loading directory', cls: 'error-text' });
 		}
 	}
 
-	/**
-	 * Starts an fs.watch on a directory. Re-renders children if a change is detected.
-	 */
 	startWatching(dirPath: string, childrenContainer: HTMLElement) {
 		if (this.activeWatchers.has(dirPath)) return;
 
 		try {
 			const watcher = fs.watch(dirPath, (eventType, filename) => {
-				// Re-render children when a file is added/removed/renamed
-				// We use a slight delay/debounce to prevent rapid firing during multiple file operations
 				setTimeout(() => {
-					// Only re-render if the container is still visible (expanded)
 					if (childrenContainer.style.display !== 'none') {
 						this.loadAndRenderChildren(childrenContainer, dirPath);
 					}
@@ -320,13 +262,11 @@ class SystemFileExplorerView extends ItemView {
 			});
 			this.activeWatchers.set(dirPath, watcher);
 		} catch (error) {
-			console.error(`Failed to watch directory ${dirPath}:`, error);
+			// Some system directories don't allow watchers
+			console.log(`Could not watch directory ${dirPath}`);
 		}
 	}
 
-	/**
-	 * Stops watching a directory and cleans up the watcher.
-	 */
 	stopWatching(dirPath: string) {
 		const watcher = this.activeWatchers.get(dirPath);
 		if (watcher) {
