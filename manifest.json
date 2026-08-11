@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"id": "spaghetti_filetree_annotation",
+	"name": "Spaghetti Filetree Annotation",
+	"version": "0.1.0",
+	"minAppVersion": "1.10.0",
+	"description": "Enables the user to link markdown notes to selection of any file or folder in a built in explorer.",
+	"author": "Squiggel",
+	"authorUrl": "https://https://github.com/Squiggel",
+	"fundingUrl": null,
+	"isDesktopOnly": true
 }
