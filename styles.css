@@ -131,16 +131,18 @@
 	color: var(--text-error);
 }
 
+/* UPDATED: Always visible and styled to look more like a button */
 .open-system-btn {
-	opacity: 0;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: 4px;
+	padding: 4px 6px;
+	margin-left: 6px;
 	background-color: var(--interactive-normal);
+	border: 1px solid var(--background-modifier-border);
 	border-radius: 4px;
-	color: var(--text-normal);
-	transition: opacity 0.2s ease, background-color 0.2s ease;
+	color: var(--text-muted);
+	transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .open-system-btn svg {
@@ -148,13 +150,10 @@
 	height: 14px;
 }
 
-.tree-node-header:hover .open-system-btn {
-	opacity: 1;
-}
-
 .open-system-btn:hover {
 	background-color: var(--interactive-accent);
 	color: var(--text-on-accent);
+	border-color: transparent;
 }
 
 .error-text {

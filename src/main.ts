@@ -109,13 +109,16 @@ class SystemFileExplorerView extends ItemView {
 	 * Completely rebuilds the tree UI. Attached to the manual refresh button.
 	 */
 	refreshTree() {
+		// 1. Capture current scroll position if the element already exists
+		const currentScrollTop = this.treeRootEl ? this.treeRootEl.scrollTop : 0;
+
 		const container = this.containerEl.children[1];
 		container.empty();
 		container.addClass('custom-explorer-container');
 
 		// 1. Sticky Header with Refresh Button
 		const headerContainer = container.createDiv('explorer-sticky-header');
-		headerContainer.createEl('h4', { text: 'My Computer' });
+		headerContainer.createEl('h4', { text: 'Spaghetti' });
 		
 		const refreshBtn = headerContainer.createEl('button', { cls: 'refresh-btn' });
 		setIcon(refreshBtn, 'refresh-cw');
@@ -131,8 +134,12 @@ class SystemFileExplorerView extends ItemView {
 		const existingNotes = this.getExistingNoteIdentifiers();
 
 		for (const root of roots) {
-			// We skip the stat check for system roots as they can throw errors, just assume no note
 			this.renderFolder(this.treeRootEl, root, root, false, existingNotes);
+		}
+
+		// 2. Restore the previous scroll position instantly after rendering
+		if (this.treeRootEl) {
+			this.treeRootEl.scrollTop = currentScrollTop;
 		}
 	}
 
