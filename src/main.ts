@@ -361,7 +361,8 @@ class SystemFileExplorerView extends ItemView {
 	 */
 	renderExplorerInterface(container: HTMLElement) {
 		// 1. If treeRootEl already exists, save its scroll position before clearing
-		if (this.treeRootEl) {
+		// 1. If treeRootEl already exists AND is still on the screen, save its scroll position
+		if (this.treeRootEl && this.treeRootEl.isConnected) {
 			this.savedScrollTop = this.treeRootEl.scrollTop;
 			this.savedScrollLeft = this.treeRootEl.scrollLeft;
 		}
@@ -419,7 +420,7 @@ class SystemFileExplorerView extends ItemView {
 			cls: 'setting-item-description'
 		});
 		descEl.style.padding = '10px 15px';
-		
+
 		// wrapper.createEl('h3', { text: 'Ghost Notes' });
 		// wrapper.createEl('p', { 
 		// 	text: 'These notes point to system files that have been deleted or moved beyond automatic detection.',
