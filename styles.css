@@ -1,24 +1,69 @@
-/* Custom System Explorer Styles */
+/* styles.css */
 
 .custom-explorer-container {
-	padding: 10px;
-	overflow-y: auto;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	position: relative;
 }
 
+/* 1. Sticky Header */
+.explorer-sticky-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 10px 15px 5px 15px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.explorer-sticky-header h4 {
+	margin: 0;
+}
+
+.refresh-btn {
+	background: none;
+	box-shadow: none;
+	border: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	padding: 4px;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.refresh-btn:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+/* 2. Horizontal & Vertical Scroll Area */
 .tree-root {
-	margin-top: 10px;
+	padding: 10px;
+	flex-grow: 1;
+	overflow: auto; /* Enables horizontal and vertical scrolling */
+	white-space: nowrap; /* Forces content to stay on one line to trigger horizontal scroll */
 }
 
 .tree-node {
 	margin: 2px 0;
-	user-select: none; /* Prevent accidental text selection while clicking */
+	user-select: none;
 }
 
 .tree-node-header {
-	display: flex;
+	display: inline-flex; /* Prevents stretching and layout breakage during horizontal scroll */
 	align-items: center;
 	padding: 4px;
 	border-radius: 4px;
+	min-width: fit-content;
+}
+
+.clickable-area {
 	cursor: pointer;
 }
 
@@ -27,12 +72,11 @@
 }
 
 .tree-node-children {
-	margin-left: 18px; /* Indentation for child elements */
+	margin-left: 18px;
 	border-left: 1px solid var(--background-modifier-border);
 	padding-left: 5px;
 }
 
-/* Icons and Text formatting */
 .collapse-btn {
 	width: 16px;
 	font-size: 10px;
@@ -49,28 +93,59 @@
 }
 
 .node-name {
-	flex-grow: 1;
 	font-size: 14px;
 	color: var(--text-normal);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	margin-right: 8px; /* Room between name and buttons */
 }
 
 .file-name {
 	color: var(--text-muted);
 }
 
-/* System Default Button */
+/* 3. Button Styling (Pen and External Link) */
+.note-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	margin-right: 4px;
+	border-radius: 4px;
+	transition: background-color 0.2s ease;
+}
+
+.note-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+.note-btn:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+/* Green when note exists, Red when note missing */
+.note-btn.exists {
+	color: var(--text-success);
+}
+
+.note-btn.missing {
+	color: var(--text-error);
+}
+
 .open-system-btn {
-	opacity: 0; /* Hidden until hovered */
-	font-size: 12px;
-	margin-left: 8px;
-	padding: 2px 6px;
+	opacity: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
 	background-color: var(--interactive-normal);
 	border-radius: 4px;
 	color: var(--text-normal);
-	transition: opacity 0.2s ease;
+	transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.open-system-btn svg {
+	width: 14px;
+	height: 14px;
 }
 
 .tree-node-header:hover .open-system-btn {
@@ -86,4 +161,5 @@
 	color: var(--text-error);
 	font-size: 12px;
 	margin-left: 10px;
+	font-style: italic;
 }
