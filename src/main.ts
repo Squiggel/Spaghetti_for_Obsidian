@@ -4,8 +4,10 @@ import {
 	ItemView,
 	WorkspaceLeaf,
 	Notice,
+	TFile,
+	normalizePath
 } from 'obsidian';
-import { DEFAULT_SETTINGS, MyPluginSettings } from './settings';
+import { DEFAULT_SETTINGS, MyPluginSettings, SystemExplorerSettingTab } from './settings';
 
 // Node and Electron modules
 import * as fs from 'fs';
@@ -22,18 +24,18 @@ export default class MyPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// Register the custom view
+		// Add our clean settings tab back so the user can set the notes folder
+		this.addSettingTab(new SystemExplorerSettingTab(this.app, this));
+
 		this.registerView(
 			EXPLORER_VIEW_TYPE,
 			(leaf) => new SystemFileExplorerView(leaf, this)
 		);
 
-		// Add a ribbon icon to toggle our custom explorer
 		this.addRibbonIcon('folder-tree', 'Open System Explorer', () => {
 			this.activateExplorerView();
 		});
 
-		// Command to open the explorer via command palette
 		this.addCommand({
 			id: 'open-system-explorer',
 			name: 'Open System File Explorer',
@@ -43,9 +45,7 @@ export default class MyPlugin extends Plugin {
 		});
 	}
 
-	onunload() {
-		// Clean up is handled by Obsidian
-	}
+	onunload() {}
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -105,11 +105,9 @@ class SystemFileExplorerView extends ItemView {
 		const header = container.createEl('h4', { text: 'My Computer' });
 		const rootNode = container.createDiv('tree-root');
 
-		// Fetch root drives depending on the OS
 		const roots = this.getSystemRoots();
 
 		for (const root of roots) {
-			// We treat the system roots as top-level folders
 			this.renderFolder(rootNode, root, root, false);
 		}
 	}
@@ -121,27 +119,78 @@ class SystemFileExplorerView extends ItemView {
 		this.activeWatchers.clear();
 	}
 
-	/**
-	 * Determines the root drives of the computer.
-	 */
 	getSystemRoots(): string[] {
 		if (os.platform() === 'win32') {
 			const drives: string[] = [];
-			// Quick and dirty check for common Windows drive letters
 			for (let i = 65; i <= 90; i++) {
 				const drive = String.fromCharCode(i) + ':\\';
 				try {
 					if (fs.existsSync(drive)) {
 						drives.push(drive);
 					}
-				} catch (e) {
-					// Ignore drives that throw errors (e.g., restricted or empty optical drives)
-				}
+				} catch (e) {}
 			}
 			return drives.length > 0 ? drives : ['C:\\'];
 		} else {
-			// macOS and Linux
 			return ['/'];
+		}
+	}
+
+	/**
+	 * Core logic for handling clicks on files and folders.
+	 * Checks settings, gets system stats, and generates/opens the Obsidian note.
+	 */
+	async handleNodeClick(name: string, fullPath: string) {
+		const folderPath = this.plugin.settings.notesFolder;
+		
+		// Requirement: Error message if no default folder is set
+		if (!folderPath || folderPath.trim() === '') {
+			new Notice('Error: Notes folder is not configured! Please set it in the plugin settings.');
+			return;
+		}
+
+		try {
+			// Get system stats for the file/folder synchronously
+			const stats = fs.statSync(fullPath);
+			
+			// Sanitize the filename to ensure it is valid for Obsidian (removes slashes, colons)
+			const safeName = name.replace(/[\\/:]/g, '_'); 
+			const notePath = normalizePath(`${folderPath}/${safeName}.md`);
+			
+			let file = this.app.vault.getAbstractFileByPath(notePath);
+			
+			// Requirement: Lazy creation (only create if it doesn't exist)
+			if (!file) {
+				// Ensure the parent directory exists in the vault first
+				const folder = this.app.vault.getAbstractFileByPath(normalizePath(folderPath));
+				if (!folder) {
+					await this.app.vault.createFolder(normalizePath(folderPath));
+				}
+				
+				// Format Windows paths nicely for YAML (escaping backslashes)
+				const yamlSafePath = fullPath.replace(/\\/g, '\\\\');
+
+				// Construct the YAML string
+				const content = `---
+full_path: "${yamlSafePath}"
+inode: ${stats.ino}
+device_id: ${stats.dev}
+modified_time: "${stats.mtime.toISOString()}"
+---
+`;
+				// Create the file in the vault
+				file = await this.app.vault.create(notePath, content);
+			}
+			
+			// Open the note in the active workspace
+			if (file instanceof TFile) {
+				const leaf = this.app.workspace.getLeaf(false); // Open in current active leaf/tab
+				await leaf.openFile(file);
+			}
+
+		} catch (err) {
+			console.error(`Failed to handle click for ${fullPath}`, err);
+			new Notice(`Error accessing system data for ${name}`);
 		}
 	}
 
@@ -155,14 +204,13 @@ class SystemFileExplorerView extends ItemView {
 		const childrenContainer = nodeEl.createDiv('tree-node-children');
 		childrenContainer.style.display = 'none';
 
-		// Check if this path was saved in data.json as expanded
 		let isExpanded = this.plugin.settings.expandedPaths.includes(dirPath);
 
+		// Replaced Notice popup with our new note opening logic
 		nameEl.onclick = () => {
-			new Notice(`Selected! ${name}`);
+			this.handleNodeClick(name, dirPath);
 		};
 
-		// The logic for expanding/collapsing
 		const toggleExpand = async () => {
 			isExpanded = !isExpanded;
 			
@@ -172,7 +220,6 @@ class SystemFileExplorerView extends ItemView {
 				this.loadAndRenderChildren(childrenContainer, dirPath);
 				this.startWatching(dirPath, childrenContainer);
 				
-				// Save state
 				if (!this.plugin.settings.expandedPaths.includes(dirPath)) {
 					this.plugin.settings.expandedPaths.push(dirPath);
 					await this.plugin.saveSettings();
@@ -183,7 +230,6 @@ class SystemFileExplorerView extends ItemView {
 				childrenContainer.empty();
 				this.stopWatching(dirPath);
 
-				// Remove from state
 				this.plugin.settings.expandedPaths = this.plugin.settings.expandedPaths.filter(p => p !== dirPath);
 				await this.plugin.saveSettings();
 			}
@@ -191,9 +237,7 @@ class SystemFileExplorerView extends ItemView {
 
 		collapseBtn.onclick = toggleExpand;
 
-		// If it's a saved expanded path (or forced root), trigger it open immediately
 		if (isExpanded || isRoot) {
-			// Temporarily set to false so the toggle function does its job correctly
 			isExpanded = false; 
 			toggleExpand();
 		}
@@ -209,8 +253,9 @@ class SystemFileExplorerView extends ItemView {
 		const openBtn = headerEl.createSpan({ cls: 'open-system-btn', text: '↗' });
 		openBtn.title = "Open with system default";
 
+		// Replaced Notice popup with our new note opening logic
 		nameEl.onclick = () => {
-			new Notice(`Selected! ${name}`);
+			this.handleNodeClick(name, filePath);
 		};
 
 		openBtn.onclick = (e) => {
@@ -232,7 +277,6 @@ class SystemFileExplorerView extends ItemView {
 			});
 
 			for (const item of items) {
-				// Skip hidden/system files to avoid permission crashes
 				if (item.name.startsWith('.')) continue;
 
 				const fullPath = path.join(dirPath, item.name);
@@ -244,7 +288,6 @@ class SystemFileExplorerView extends ItemView {
 				}
 			}
 		} catch (error) {
-			// Extremely common when hitting protected OS folders (like "System Volume Information")
 			containerEl.createDiv({ text: 'Access denied or error loading directory', cls: 'error-text' });
 		}
 	}
@@ -262,7 +305,6 @@ class SystemFileExplorerView extends ItemView {
 			});
 			this.activeWatchers.set(dirPath, watcher);
 		} catch (error) {
-			// Some system directories don't allow watchers
 			console.log(`Could not watch directory ${dirPath}`);
 		}
 	}
