@@ -405,15 +405,26 @@ class SystemFileExplorerView extends ItemView {
 	 */
 	renderOrphansInterface(container: HTMLElement) {
 		const wrapper = container.createDiv('orphans-view-wrapper');
-		wrapper.style.padding = '15px';
+		//wrapper.style.padding = '15px';
 		wrapper.style.overflowY = 'auto';
 		wrapper.style.flexGrow = '1';
 
-		wrapper.createEl('h3', { text: 'Ghost Notes' });
-		wrapper.createEl('p', { 
+		// 1. ADD THIS: Reuse the exact same header style as the Explorer tab
+		const headerContainer = wrapper.createDiv('explorer-sticky-header');
+		headerContainer.createEl('h4', { text: 'Ghost Notes' }); // Changed to h4 to match Explorer sizing
+
+		// 2. Adjust padding on the description text so it doesn't touch the walls
+		const descEl = wrapper.createEl('p', { 
 			text: 'These notes point to system files that have been deleted or moved beyond automatic detection.',
 			cls: 'setting-item-description'
 		});
+		descEl.style.padding = '10px 15px';
+		
+		// wrapper.createEl('h3', { text: 'Ghost Notes' });
+		// wrapper.createEl('p', { 
+		// 	text: 'These notes point to system files that have been deleted or moved beyond automatic detection.',
+		// 	cls: 'setting-item-description'
+		// });
 
 		const listContainer = wrapper.createDiv({ cls: 'orphans-list-container' });
 		listContainer.style.marginTop = '15px';
