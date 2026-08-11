@@ -103,13 +103,13 @@ export default class MyPlugin extends Plugin {
 		addIcon('noodle-box', NOODLE_ICON_SVG);
 
 		// 3. Use the unique ID instead of 'folder-tree'
-		this.addRibbonIcon('noodle-box', 'Open System Explorer', () => {
+		this.addRibbonIcon('noodle-box', 'Spaghetti', () => {
 			this.activateExplorerView();
 		});
 
 		this.addCommand({
 			id: 'open-system-explorer',
-			name: 'Open System File Explorer',
+			name: 'Spaghetti',
 			callback: () => {
 				this.activateExplorerView();
 			}
@@ -242,7 +242,7 @@ class SystemFileExplorerView extends ItemView {
 	}
 
 	getDisplayText() {
-		return 'System Explorer';
+		return 'Spaghetti';
 	}
 
 	// Add this new method right here!
@@ -266,7 +266,7 @@ class SystemFileExplorerView extends ItemView {
 		container.empty();
 		container.addClass('custom-explorer-container');
 
-		// View Navigation Tabs Header
+		// View Navigation Tabs Header (EXISTING)
 		const navHeader = container.createDiv('explorer-view-nav');
 		navHeader.style.display = 'flex';
 		navHeader.style.gap = '5px';
@@ -274,25 +274,75 @@ class SystemFileExplorerView extends ItemView {
 		navHeader.style.borderBottom = '1px solid var(--background-modifier-border)';
 		navHeader.style.backgroundColor = 'var(--background-secondary)';
 
-		const explorerTabBtn = navHeader.createEl('button', { 
-			text: 'Explorer', 
-			cls: this.activeMainTab === 'explorer' ? 'mod-cta' : '' 
+		// // --- EXPLORER TAB ---
+		// const explorerTabBtn = navHeader.createEl('button', { 
+		// 	// CHANGE: Removed the text property from here
+		// 	cls: this.activeMainTab === 'explorer' ? 'mod-cta' : '' 
+		// });
+		
+		// // CHANGE: Added these 3 lines to format the inside of the button
+		// explorerTabBtn.style.display = 'flex';
+		// explorerTabBtn.style.alignItems = 'center';
+		// explorerTabBtn.style.gap = '6px';
+		// --- EXPLORER TAB ---
+		const explorerTabBtn = navHeader.createDiv({ 
+			// Use Obsidian's flat icon class instead of a standard button
+			cls: `clickable-icon ${this.activeMainTab === 'explorer' ? 'is-active' : ''}` 
 		});
+		explorerTabBtn.title = "Explorer"; // <--- ADDED HOVER TEXT
+		
+		explorerTabBtn.style.display = 'flex';
+		explorerTabBtn.style.alignItems = 'center';
+		explorerTabBtn.style.gap = '6px';
+		explorerTabBtn.style.padding = '4px 8px'; // Give it a little breathing room
+		
+		// CHANGE: Injected the icon and added the text as a separate span
+		setIcon(explorerTabBtn, 'compass'); 
+		//explorerTabBtn.createSpan({ text: 'Explorer' }); 
+		
+		// (EXISTING)
 		explorerTabBtn.onclick = () => {
 			this.activeMainTab = 'explorer';
 			this.renderMainView();
 		};
 
-		const orphansTabBtn = navHeader.createEl('button', { 
-			text: 'Orphans', 
-			cls: this.activeMainTab === 'orphans' ? 'mod-cta' : '' 
+		// --- ORPHANS TAB ---
+		// const orphansTabBtn = navHeader.createEl('button', { 
+		// 	// CHANGE: Removed the text property from here
+		// 	cls: this.activeMainTab === 'orphans' ? 'mod-cta' : '' 
+		// });
+		
+		// // CHANGE: Added these 3 lines to format the inside of the button
+		// orphansTabBtn.style.display = 'flex';
+		// orphansTabBtn.style.alignItems = 'center';
+		// orphansTabBtn.style.gap = '6px';
+		// --- ORPHANS TAB ---
+		const orphansTabBtn = navHeader.createDiv({ 
+			// Use Obsidian's flat icon class instead of a standard button
+			cls: `clickable-icon ${this.activeMainTab === 'orphans' ? 'is-active' : ''}` 
 		});
+		orphansTabBtn.title = "Ghosts"; // <--- ADDED HOVER TEXT
+		
+		orphansTabBtn.style.display = 'flex';
+		orphansTabBtn.style.alignItems = 'center';
+		orphansTabBtn.style.gap = '6px';
+		orphansTabBtn.style.padding = '4px 8px'; // Give it a little breathing room
+		
+		// CHANGE: Injected the icon and added the text as a separate span
+		setIcon(orphansTabBtn, 'ghost'); 
+		//orphansTabBtn.createSpan({ text: 'Orphans' }); 
+		
+		// (EXISTING)
 		orphansTabBtn.onclick = () => {
+			if (this.activeMainTab === 'explorer' && this.treeRootEl) {
+				this.savedScrollTop = this.treeRootEl.scrollTop;
+				this.savedScrollLeft = this.treeRootEl.scrollLeft;
+			}
 			this.activeMainTab = 'orphans';
 			this.renderMainView();
 		};
 
-		// Content Panel Container
+		// Content Panel Container (EXISTING)
 		const contentContainer = container.createDiv('explorer-tab-content');
 		contentContainer.style.display = 'flex';
 		contentContainer.style.flexDirection = 'column';
@@ -321,7 +371,7 @@ class SystemFileExplorerView extends ItemView {
 
 		// Sub-header with Title & Refresh Button
 		const headerContainer = container.createDiv('explorer-sticky-header');
-		headerContainer.createEl('h4', { text: 'Spaghetti' });
+		headerContainer.createEl('h4', { text: 'Explorer' });
 		
 		const refreshBtn = headerContainer.createEl('button', { cls: 'refresh-btn' });
 		setIcon(refreshBtn, 'refresh-cw');
@@ -359,7 +409,7 @@ class SystemFileExplorerView extends ItemView {
 		wrapper.style.overflowY = 'auto';
 		wrapper.style.flexGrow = '1';
 
-		wrapper.createEl('h3', { text: 'Orphaned System Notes' });
+		wrapper.createEl('h3', { text: 'Ghost Notes' });
 		wrapper.createEl('p', { 
 			text: 'These notes point to system files that have been deleted or moved beyond automatic detection.',
 			cls: 'setting-item-description'
@@ -439,7 +489,7 @@ class SystemFileExplorerView extends ItemView {
 			openNoteBtn.style.justifyContent = 'center';
 			
 			setIcon(openNoteBtn, 'pen'); // Uses the same pen icon style as the tree explorer
-			openNoteBtn.title = "Open orphan note";
+			openNoteBtn.title = "Open note";
 			openNoteBtn.onclick = async () => {
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(orphan.note);
