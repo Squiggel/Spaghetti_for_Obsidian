@@ -1,3 +1,3 @@
 # Spaghetti for Obsidian
 
-![logo.png]
+![Logo](logo.png)
