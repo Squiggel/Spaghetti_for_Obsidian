@@ -203,7 +203,7 @@ export default class MyPlugin extends Plugin {
 		const leaves = workspace.getLeavesOfType(EXPLORER_VIEW_TYPE);
 
 		if (leaves.length > 0) {
-			leaf = leaves[0];
+			leaf = leaves[0] ?? null;
 		} else {
 			leaf = workspace.getRightLeaf(false);
 			if (leaf) {
@@ -262,7 +262,11 @@ class SystemFileExplorerView extends ItemView {
 	 * Renders the top-level panel layout with view selection tabs (Explorer vs Orphans)
 	 */
 	renderMainView() {
-		const container = this.containerEl.children[1];
+		const container = this.containerEl.children[1] as HTMLElement;
+        
+        // Optional but recommended: Safety check to prevent runtime crashes
+		if (!container) return; 
+
 		container.empty();
 		container.addClass('custom-explorer-container');
 
