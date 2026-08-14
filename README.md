@@ -6,5 +6,5 @@ Example use case:
 1. Learning a new file system on a project where contextual understanding is important or team file system discipline is poor 
 2. Bi-directional linking/discovery of files to notes e.g. a cad file to a project or research note
 
-<img src="screenshot1.png" alt="Logo" width="100">
-<img src="screenshot2.png" alt="Logo" width="100">
+<img src="screenshot1.png" alt="screenshot1" width="100">
+<img src="screenshot2.png" alt="screenshot2" width="100">
