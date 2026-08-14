@@ -1,7 +1,7 @@
 {
 	"id": "spaghetti_filetree_annotation",
 	"name": "Spaghetti Filetree Annotation",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"minAppVersion": "1.10.0",
 	"description": "Enables the user to link markdown notes to selection of any file or folder in a built in explorer.",
 	"author": "Squiggel",
